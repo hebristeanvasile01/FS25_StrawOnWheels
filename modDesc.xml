@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<modDesc descVersion="116">
+    <author>FS Modding</author>
+    <version>1.0.0.0</version>
+    <title>
+        <en>Straw On Wheels</en>
+        <de>Stroh An Den Reifen</de>
+        <fr>Paille Sur Les Roues</fr>
+    </title>
+    <description>
+        <en><![CDATA[Drive through straw windrows and the straw sticks to your tyres.
+
+- Roll over straw swaths on a field and straw pieces stick to the wheels
+- The straw turns with the wheel and stays on until you drive 30 km/h or faster
+- Works on tractors, trailers and every vehicle with wheels
+- Visual effect only, no performance cost on empty fields
+- Multiplayer supported
+
+CONSOLE
+- sowToggle: mod on/off
+- sowSpeed 30: speed in km/h from which the straw falls off
+- sowInfo: status]]></en>
+        <de><![CDATA[Fahre durch Strohschwaden und das Stroh bleibt an den Reifen haengen.
+
+- Ueberfahre Strohschwaden auf dem Feld und Strohstuecke bleiben an den Raedern kleben
+- Das Stroh dreht sich mit dem Rad und bleibt haengen, bis du 30 km/h oder schneller faehrst
+- Funktioniert bei Traktoren, Anhaengern und jedem Fahrzeug mit Raedern
+- Nur ein optischer Effekt
+- Mehrspieler unterstuetzt
+
+KONSOLE
+- sowToggle: Mod ein/aus
+- sowSpeed 30: Geschwindigkeit in km/h, ab der das Stroh abfaellt
+- sowInfo: Status]]></de>
+        <fr><![CDATA[Roulez dans les andains de paille et la paille colle a vos pneus.
+
+- Roulez sur des andains de paille dans un champ et des brins de paille collent aux roues
+- La paille tourne avec la roue et reste collee jusqu'a 30 km/h ou plus
+- Fonctionne sur les tracteurs, remorques et tous les vehicules a roues
+- Effet visuel uniquement
+- Multijoueur pris en charge
+
+CONSOLE
+- sowToggle : mod active/desactive
+- sowSpeed 30 : vitesse en km/h a partir de laquelle la paille tombe
+- sowInfo : etat]]></fr>
+    </description>
+    <iconFilename>icon_strawOnWheels.dds</iconFilename>
+    <multiplayer supported="true"/>
+    <extraSourceFiles>
+        <sourceFile filename="strawonwheels.lua"/>
+    </extraSourceFiles>
+</modDesc>

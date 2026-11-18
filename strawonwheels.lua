@@ -99,34 +99,81 @@ local function strawUnder(x, z)
     return total
 end
 
+-- finds every tyre of a wheel, dual (outer) wheels included.
+-- a tyre is a shape whose bounding sphere matches the wheel size; its sphere centre is the tyre centre
+local function findTires(wheel, turning, R, W)
+    local tires, seen = {}, {}
+    if getShapeBoundingSphere == nil then return tires end
+    local maxR = math.sqrt(R * R + (W * 1.6) ^ 2) * 1.1
+    local function visit(node, depth)
+        if depth > 7 or node == nil or type(node) ~= "number" or not entityExists(node) or seen[node] then return end
+        seen[node] = true
+        local isShape = false
+        pcall(function() isShape = getHasClassId(node, ClassIds.SHAPE) end)
+        if isShape then
+            local ok, cx, cy, cz, r = pcall(getShapeBoundingSphere, node)
+            if ok and r ~= nil and r >= R * 0.95 and r <= maxR then
+                local half = math.sqrt(math.max(r * r - R * R, (W * 0.25) ^ 2))
+                local width = clamp(half * 2, W * 0.4, W * 1.8)
+                table.insert(tires, { parent = node, cx = cx, cy = cy, cz = cz, radius = R, width = width })
+            end
+        end
+        for i = 0, getNumOfChildren(node) - 1 do visit(getChildAt(node, i), depth + 1) end
+    end
+    visit(turning, 0)
+    -- dual wheels may hang elsewhere: look at every node stored on the additional wheels
+    if type(wheel.additionalWheels) == "table" then
+        for _, aw in pairs(wheel.additionalWheels) do
+            if type(aw) == "table" then
+                for _, v in pairs(aw) do if type(v) == "number" then visit(v, 0) end end
+            end
+        end
+    end
+    return tires
+end
+
 function StrawOnWheels:addPiece(wstate, radius, width)
     if self.template == nil then return end
-    local parent = wstate.turning
+    if wstate.tires == nil then
+        wstate.tires = findTires(wstate.wheel, wstate.turning, radius, width)
+        Logging.info("[StrawOnWheels] wheel radius %.2f width %.2f: %d tyre(s) found%s", radius, width, #wstate.tires,
+            #wstate.tires == 0 and ", using the wheel centre" or "")
+        for _, t in ipairs(wstate.tires) do
+            Logging.info("[StrawOnWheels]   tyre centre %.2f %.2f %.2f, width %.2f", t.cx, t.cy, t.cz, t.width)
+        end
+        if #wstate.tires == 0 then
+            wstate.tires = { { parent = wstate.turning, cx = 0, cy = 0, cz = 0, radius = radius, width = width } }
+        end
+    end
+    local tire = wstate.tires[math.random(#wstate.tires)]
+    local parent = tire.parent
     if parent == nil or not entityExists(parent) then return end
+    local pivot = createTransformGroup("sowPivot")
+    link(parent, pivot)
+    setTranslation(pivot, tire.cx, tire.cy, tire.cz)
     local node = clone(self.template, false, false, false)
-    if node == nil or node == 0 then return end
-    link(parent, node)
+    if node == nil or node == 0 then delete(pivot); return end
+    link(pivot, node)
     setVisibility(node, true)
     local angle = math.random() * math.pi * 2
-    local along = (math.random() - 0.5) * width * 0.9
-    local out = radius + 0.01 + math.random() * 0.05
-    local size = 0.18 + math.random() * 0.22
+    local w = tire.width * (0.3 + math.random() * 0.6)
+    local along = (math.random() - 0.5) * (tire.width - w)
+    local r = tire.radius * (1.006 + math.random() * 0.02)
     local piece = {
-        node = node, age = 0, fall = 0,
+        node = node, pivot = pivot, age = 0, fall = 0,
         life = self.SHED_MIN + math.random() * (self.SHED_MAX - self.SHED_MIN),
-        y = out * math.cos(angle), z = out * math.sin(angle), x = along,
-        rx = angle, ry = (math.random() - 0.5) * 1.6, rz = (math.random() - 0.5) * 0.9,
-        sx = size, sz = size * (0.7 + math.random() * 0.8),
+        x = along, w = w, r = r, rx = angle,
     }
-    setTranslation(node, piece.x, piece.y, piece.z)
-    setRotation(node, piece.rx, piece.ry, piece.rz)
-    setScale(node, piece.sx, 1, piece.sz)
+    setTranslation(node, piece.x, 0, 0)
+    setRotation(node, piece.rx, 0, 0)
+    setScale(node, piece.w, piece.r, piece.r)
     if setClipDistance ~= nil then setClipDistance(node, 120) end
     table.insert(wstate.pieces, piece)
 end
 
 function StrawOnWheels:removePiece(piece)
-    if piece.node ~= nil and entityExists(piece.node) then delete(piece.node) end
+    if piece.pivot ~= nil and entityExists(piece.pivot) then delete(piece.pivot) end
+    piece.pivot = nil
     piece.node = nil
 end
 
@@ -141,10 +188,9 @@ function StrawOnWheels:updatePieces(wstate, dt, speed)
             if p.age >= p.life then
                 p.fall = p.fall + dt
                 local t = clamp(p.fall / self.FALL_MS, 0, 1)
-                -- the piece peels off the tyre and shrinks away
-                local s = 1 - t
-                setTranslation(p.node, p.x, p.y * (1 + 0.5 * t), p.z * (1 + 0.5 * t))
-                setScale(p.node, p.sx * s, 1, p.sz * s)
+                -- the layer lifts off the tyre and thins out
+                local lift = 1 + 0.35 * t
+                setScale(p.node, p.w * (1 - t), p.r * lift, p.r * lift)
                 if t >= 1 then
                     self:removePiece(p)
                     table.remove(wstate.pieces, i)
@@ -175,7 +221,7 @@ function StrawOnWheels:updateVehicle(vehicle, dt)
         local wstate = state.wheels[i]
         if wstate == nil then
             local _, _, turning = wheelParts(wheel)
-            wstate = { pieces = {}, addTimer = 0, turning = turning }
+            wstate = { pieces = {}, addTimer = 0, turning = turning, wheel = wheel }
             if wstate.turning == nil then
                 local _, _, _, center = wheelParts(wheel)
                 wstate.turning = center
@@ -188,7 +234,7 @@ function StrawOnWheels:updateVehicle(vehicle, dt)
         if check and speed >= self.MIN_SPEED and wstate.turning ~= nil then
             wstate.addTimer = wstate.addTimer + step
             local x, y, z = wheelContact(wheel)
-            if x ~= nil and wstate.addTimer >= self.ADD_INTERVAL and #wstate.pieces < self.MAX_PIECES then
+            if x ~= nil and wstate.addTimer >= self.ADD_INTERVAL and #wstate.pieces < self.MAX_PIECES * math.max(1, wstate.tires ~= nil and #wstate.tires or 1) then
                 if strawUnder(x, z) >= self.MIN_LEVEL then
                     wstate.addTimer = 0
                     local _, _, _, _, radius, width = wheelParts(wheel)
